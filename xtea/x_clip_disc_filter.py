@@ -48,17 +48,33 @@ def unwrap_self_calc_AF_by_clip_reads(arg, **kwarg):
 # PATCH (issue #150): timeout in seconds for pool.map() calls.
 # If a worker hangs past this limit, TimeoutError is raised instead of blocking forever.
 # Set to None to disable (not recommended).
-POOL_TIMEOUT = 3600
+POOL_TIMEOUT = None
+_env_timeout = os.environ.get("XTEA_POOL_TIMEOUT")
+if _env_timeout is not None:
+    try:
+        POOL_TIMEOUT = int(_env_timeout)
+    except ValueError:
+        print("[WARNING] XTEA_POOL_TIMEOUT='{}' is not a valid integer, "
+              "using no timeout.".format(_env_timeout), flush=True)
 
 def _safe_pool_map(pool, func, args, timeout=POOL_TIMEOUT):
-    """
-    Drop-in replacement for pool.map() that won't hang forever if a worker stalls.
-    Uses map_async + get(timeout) so a stuck worker raises TimeoutError.
-    Always calls pool.terminate() + pool.join() in the finally block to reap workers.
-    """
     try:
         result = pool.map_async(func, args)
-        return result.get(timeout=timeout)
+        n_tasks = len(args)
+        elapsed = 0
+        interval = 300  # log every 5 minutes
+        while True:
+            try:
+                return result.get(timeout=interval)
+            except multiprocessing.TimeoutError:
+                elapsed += interval
+                print("[INFO] Pool still running after {}m — {} tasks submitted, "
+                      "waiting...".format(elapsed // 60, n_tasks),
+                      flush=True)
+                if timeout is not None and elapsed >= timeout:
+                    raise TimeoutError(
+                        "Pool exceeded hard timeout of {}s".format(timeout)
+                    )
     except Exception:
         pool.terminate()
         raise
