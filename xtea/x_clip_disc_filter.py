@@ -45,6 +45,27 @@ def unwrap_self_collect_clip_disc_reads(arg, **kwarg):
 def unwrap_self_calc_AF_by_clip_reads(arg, **kwarg):
     return XClipDisc.calc_AF_of_site(*arg, **kwarg)
 
+# PATCH (issue #150): timeout in seconds for pool.map() calls.
+# If a worker hangs past this limit, TimeoutError is raised instead of blocking forever.
+# Set to None to disable (not recommended).
+POOL_TIMEOUT = 3600
+
+def _safe_pool_map(pool, func, args, timeout=POOL_TIMEOUT):
+    """
+    Drop-in replacement for pool.map() that won't hang forever if a worker stalls.
+    Uses map_async + get(timeout) so a stuck worker raises TimeoutError.
+    Always calls pool.terminate() + pool.join() in the finally block to reap workers.
+    """
+    try:
+        result = pool.map_async(func, args)
+        return result.get(timeout=timeout)
+    except Exception:
+        pool.terminate()
+        raise
+    finally:
+        pool.terminate()
+        pool.join()
+
 class XClipDisc():####
     def __init__(self, sf_bam, working_folder, n_jobs, sf_ref):
         self.sf_bam = sf_bam
@@ -300,9 +321,8 @@ class XClipDisc():####
                 pos = int(fields[1])  # candidate insertion site
                 l_chrm_records.append(((chrm, pos, extnd), self.sf_bam, self.working_folder))
         pool = Pool(self.n_jobs)
-        l_low_mapq=pool.map(unwrap_self_collect_clip_disc_reads, list(zip([self] * len(l_chrm_records), l_chrm_records)), 1)
-        pool.close()
-        pool.join()
+        l_low_mapq = _safe_pool_map(pool, unwrap_self_collect_clip_disc_reads,
+                                    list(zip([self] * len(l_chrm_records), l_chrm_records)))
 
         ###I. For clipped reads
         ## get all the clipped parts for each candidate site
@@ -366,9 +386,8 @@ class XClipDisc():####
                 for pos in m_chrm_pos[chrm]:
                     l_chrm_records.append(((chrm, pos, extnd), self.sf_bam, self.working_folder))
                 pool = Pool(self.n_jobs)
-                pool.map(unwrap_self_collect_clip_disc_reads, list(zip([self] * len(l_chrm_records), l_chrm_records)), 1)
-                pool.close()
-                pool.join()
+                _safe_pool_map(pool, unwrap_self_collect_clip_disc_reads,
+                               list(zip([self] * len(l_chrm_records), l_chrm_records)))
 
                 ###I. For clipped reads
                 ## get all the clipped parts for each candidate site
@@ -383,18 +402,22 @@ class XClipDisc():####
                     insertion_pos = record[0][1]
                     s_pos_info = "{0}_{1}".format(chrm, insertion_pos)
                     sf_clip_fq = self.working_folder + s_pos_info + global_values.CLIP_FQ_SUFFIX
-                    with open(sf_clip_fq) as fin_clip_fq:
-                        for line in fin_clip_fq:
-                            fout_merged_clip_fq.write(line)
-                    if os.path.isfile(sf_clip_fq) == True:  # here remove the temporary file
+                    if os.path.isfile(sf_clip_fq):  # PATCH: guard against missing file from failed worker
+                        with open(sf_clip_fq) as fin_clip_fq:
+                            for line in fin_clip_fq:
+                                fout_merged_clip_fq.write(line)
                         os.remove(sf_clip_fq)
+                    else:
+                        print("[WARNING] Missing temp clip file, worker may have failed: {}".format(sf_clip_fq))
 
                     sf_disc_pos = self.working_folder + s_pos_info + global_values.DISC_POS_SUFFIX  # this is to save the disc positions
-                    with open(sf_disc_pos) as fin_disc_pos:
-                        for line in fin_disc_pos:
-                            fout_merged_disc_pos.write(line)
-                    if os.path.isfile(sf_disc_pos):
+                    if os.path.isfile(sf_disc_pos):  # PATCH: guard against missing file from failed worker
+                        with open(sf_disc_pos) as fin_disc_pos:
+                            for line in fin_disc_pos:
+                                fout_merged_disc_pos.write(line)
                         os.remove(sf_disc_pos)
+                    else:
+                        print("[WARNING] Missing temp disc file, worker may have failed: {}".format(sf_disc_pos))
         # now, need to retrieve the reads according to the read names and disc positions
         #bam_info = BamInfo(self.sf_bam, self.sf_reference)
         #bam_info.extract_mate_reads_by_name(sf_all_disc_pos, bin_size, self.working_folder, self.n_jobs, sf_disc_fa)
@@ -625,9 +648,8 @@ class XClipDisc():####
             l_chrm_records.append((chrm, sf_bam_list, sf_candidate_list, extnd, clip_slack, af, self.working_folder))
 
         pool = Pool(self.n_jobs)
-        pool.map(unwrap_self_calc_AF_by_clip_reads, list(zip([self] * len(l_chrm_records), l_chrm_records)), 1)
-        pool.close()
-        pool.join()
+        _safe_pool_map(pool, unwrap_self_calc_AF_by_clip_reads,
+                       list(zip([self] * len(l_chrm_records), l_chrm_records)))
 
         ####
         with open(sf_out, "w") as fout_rslt:
@@ -652,9 +674,8 @@ class XClipDisc():####
             l_chrm_records.append((chrm, sf_bam_list, sf_candidate_list, extnd, clip_slack, self.working_folder))
 
         pool = Pool(self.n_jobs)
-        pool.map(unwrap_self_collect_clip_disc_features, list(zip([self] * len(l_chrm_records), l_chrm_records)), 1)
-        pool.close()
-        pool.join()
+        _safe_pool_map(pool, unwrap_self_collect_clip_disc_features,
+                       list(zip([self] * len(l_chrm_records), l_chrm_records)))
 ####
         ####
         with open(sf_out, "w") as fout_rslt:

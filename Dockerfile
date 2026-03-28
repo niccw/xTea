@@ -1,7 +1,7 @@
 #######################################################################
 #     Basic image
 #######################################################################
-FROM ubuntu:16.04
+FROM ubuntu:22.04
 MAINTAINER Chong Simon Chu (chong.simon.chu@gmail.com), Michele Berselli (berselli.michele@gmail.com)
 
 #######################################################################
