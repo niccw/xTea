@@ -48,12 +48,8 @@ RUN pip install deep-forest==0.1.5
 #######################################################################
 ## xTea
 RUN git clone https://github.com/niccw/xTea.git && \
-    cd xTea && \
-    git checkout v0.1.9 && \
-    cd .. && \
-    cp -r xTea/xtea/* .
-RUN rm -rf xTea
-RUN chmod +x *.py
+    cp -r xTea/xtea/* . && \
+    rm -rf xTea
 
 #######################################################################
 #     Setting env variables
