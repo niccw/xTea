@@ -47,7 +47,7 @@ RUN pip install deep-forest==0.1.5
 #     Scripts
 #######################################################################
 ## xTea
-RUN git clone https://github.com/parklab/xTea.git && \
+RUN git clone https://github.com/niccw/xTea.git && \
     cd xTea && \
     git checkout v0.1.9 && \
     cd .. && \
