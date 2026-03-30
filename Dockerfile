@@ -2,7 +2,7 @@
 #     Basic image
 #######################################################################
 FROM ubuntu:22.04
-MAINTAINER Chong Simon Chu (chong.simon.chu@gmail.com), Michele Berselli (berselli.michele@gmail.com)
+#MAINTAINER Chong Simon Chu (chong.simon.chu@gmail.com), Michele Berselli (berselli.michele@gmail.com)
 
 #######################################################################
 #     General updates & installing necessary Linux components
@@ -49,6 +49,7 @@ RUN pip install deep-forest==0.1.5
 ## xTea
 RUN git clone https://github.com/niccw/xTea.git && \
     cp -r xTea/xtea/* . && \
+    cp -r xTea/bin/* . && \
     rm -rf xTea
 
 #######################################################################
@@ -58,4 +59,4 @@ RUN git clone https://github.com/niccw/xTea.git && \
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
-CMD ["ls /usr/local/bin"]
+CMD ["/bin/bash"]
