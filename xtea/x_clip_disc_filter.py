@@ -27,7 +27,7 @@ import os
 import sys
 import pysam
 from subprocess import *
-from multiprocessing import *
+import multiprocessing
 from multiprocessing import Pool
 from x_alignments import *
 from x_annotation import *
